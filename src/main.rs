@@ -1,3 +1,4 @@
+use anyhow::Result;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -7,13 +8,10 @@ use axum::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use url::Url;
 
-type Database = Arc<Mutex<HashMap<String, String>>>;
+type DatabasePool = SqlitePool;
 
 #[derive(Deserialize)]
 pub struct ShortenRequest {
@@ -25,6 +23,12 @@ pub struct ShortenResponse {
     short_url: String,
 }
 
+// یک struct جدید برای نگهداری رکوردی که از دیتابیس می‌خونیم
+#[derive(sqlx::FromRow)]
+struct UrlRecord {
+    original_url: String,
+}
+
 fn generate_short_code() -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
@@ -34,17 +38,22 @@ fn generate_short_code() -> String {
 }
 
 async fn shorten(
-    State(db): State<Database>,
+    State(pool): State<DatabasePool>,
     Json(payload): Json<ShortenRequest>,
-) -> Json<ShortenResponse> {
+) -> Result<Json<ShortenResponse>, StatusCode> {
     let short_code = generate_short_code();
 
-    db.lock()
-        .unwrap()
-        .insert(short_code.clone(), payload.url);
-    
-    // NOTE: This should ideally be configurable, but for now it's fine.
-    let base_url = "http://localhost:3000/"; 
+    sqlx::query("INSERT INTO urls (short_code, original_url) VALUES (?, ?)")
+        .bind(&short_code)
+        .bind(&payload.url)
+        .execute(&pool)
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to insert into database: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let base_url = "http://localhost:3000/";
     let full_short_url = Url::parse(base_url)
         .unwrap()
         .join(&short_code)
@@ -55,38 +64,69 @@ async fn shorten(
         short_url: full_short_url,
     };
 
-    Json(response)
+    Ok(Json(response))
 }
 
+// --- تابع redirect کامل شده ---
 async fn redirect(
-    Path(short_code): Path<String>,
-    State(db): State<Database>,
+    State(pool): State<DatabasePool>,
+    Path(short_code): Path<String>, // کد کوتاه رو از مسیر URL استخراج می‌کنه
 ) -> impl IntoResponse {
-    let db_locked = db.lock().unwrap();
+    // با استفاده از `query_as!` یک کوئری SELECT اجرا می‌کنیم
+    // و نتیجه رو به `UrlRecord` تبدیل می‌کنیم.
+    let result = sqlx::query_as::<_, UrlRecord>("SELECT original_url FROM urls WHERE short_code = ?")
+        .bind(&short_code)
+        .fetch_one(&pool) // .fetch_one() سعی می‌کنه دقیقاً یک رکورد پیدا کنه
+        .await;
 
-    if let Some(long_url) = db_locked.get(&short_code) {
-        println!("Redirecting {} to {}", short_code, long_url);
-        Redirect::permanent(long_url).into_response()
-    } else {
-        (StatusCode::NOT_FOUND, "URL Not Found").into_response()
+    match result {
+        // اگر یک رکورد پیدا شد
+        Ok(record) => {
+            println!("Redirecting {} to {}", short_code, record.original_url);
+            // کاربر رو به URL اصلی هدایت می‌کنیم
+            Redirect::permanent(&record.original_url).into_response()
+        }
+        // اگر رکوردی پیدا نشد
+        Err(_) => {
+            // خطای 404 Not Found برمی‌گردونیم
+            (StatusCode::NOT_FOUND, "URL Not Found").into_response()
+        }
     }
 }
 
-#[tokio::main]
-async fn main() {
-    let db = Database::new(Mutex::new(HashMap::new()));
 
-    
+#[tokio::main]
+async fn main() -> Result<()> {
+    let db_url = "sqlite://urls.db?mode=rwc";
+    let pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(db_url)
+        .await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS urls (
+            id INTEGER PRIMARY KEY,
+            short_code TEXT NOT NULL UNIQUE,
+            original_url TEXT NOT NULL
+        );"
+    )
+    .execute(&pool)
+    .await?;
+
+    println!("پایگاه داده با موفقیت راه‌اندازی شد و جدول 'urls' آماده است.");
+
     let app = Router::new()
         .route("/shorten", post(shorten))
-        .route("/:id", get(redirect)) 
-        .with_state(db);
+        .route("/:id", get(redirect))
+        .with_state(pool);
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("http://{} server is running ", addr);
+    println!("سرور در آدرس http://{} در حال اجراست", addr);
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
+    
+    Ok(())
 }

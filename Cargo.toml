@@ -9,3 +9,5 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 url = "2.4"
 rand = "0.8.0"
+sqlx = {version = "0.6.0" , features = ["sqlite", "runtime-tokio-native-tls"]}
+anyhow = "1.0.0"
