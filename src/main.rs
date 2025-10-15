@@ -43,7 +43,6 @@ async fn shorten(
         .unwrap()
         .insert(short_code.clone(), payload.url);
     
-    // NOTE: This should ideally be configurable, but for now it's fine.
     let base_url = "http://localhost:3000/"; 
     let full_short_url = Url::parse(base_url)
         .unwrap()
