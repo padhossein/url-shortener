@@ -24,14 +24,14 @@ async fn spawn_app() -> (String, DatabasePool) {
     let addr = format!("http://127.0.0.1:{}", port);
 
     // سرور رو در یک ترد جداگانه در پس‌زمینه اجرا می‌کنیم
-    tokio::spawn(async move {
-        axum::Server::from_tcp(listener)
-            .unwrap()
-            .serve(app.into_make_service())
-            .await
-            .unwrap();
-    });
-
+    // سرور را در یک ترد جداگانه در پس‌زمینه اجرا می‌کنیم
+   tokio::spawn(async move {
+    axum::Server::from_tcp(listener.into_std().unwrap())
+        .unwrap() // <-- Add this line to get the builder out of the Result
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
+});
     (addr, pool)
 }
 

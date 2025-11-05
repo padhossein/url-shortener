@@ -15,12 +15,12 @@ use url::Url;
 // اینها رو `pub` می‌کنیم تا از بیرون ماژول (مثل main.rs و تست‌ها) قابل دسترسی باشن
 pub type DatabasePool = SqlitePool;
 
-#[derive(Deserialize)]
+#[derive(Deserialize , Serialize)]
 pub struct ShortenRequest {
     pub url: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize , Deserialize)]
 pub struct ShortenResponse {
     pub short_url: String,
 }
