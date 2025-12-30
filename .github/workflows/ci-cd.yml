@@ -1,0 +1,32 @@
+name: Rust Formatting
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout the code
+      - uses: actions/checkout@v4
+
+      # 2. Install the Rust toolchain
+      # We use dtolnay/rust-toolchain (community standard)
+      # explicitly requesting the 'rustfmt' component.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      # 3. Check formatting
+      # --all checks all workspace members
+      # -- --check ensures it fails if files are unformatted (does not write changes)
+      - name: Check formatting
+        run: cargo fmt --all -- --check
