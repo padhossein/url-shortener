@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use sqlx::SqlitePool;
 use tokio::net::TcpListener;
 // نام کتابخانه شما (پروژه) و توابع عمومی آن
-use url_shortener::{create_app, setup_database, DatabasePool, ShortenRequest, ShortenResponse};
+use url_shortener::{DatabasePool, ShortenRequest, ShortenResponse, create_app, setup_database};
 
 /// تابع کمکی برای راه‌اندازی سرور تست
 /// این تابع یک دیتابیس در حافظه (memory) می‌سازه که بعد از تست پاک می‌شه
@@ -25,13 +25,13 @@ async fn spawn_app() -> (String, DatabasePool) {
 
     // سرور رو در یک ترد جداگانه در پس‌زمینه اجرا می‌کنیم
     // سرور را در یک ترد جداگانه در پس‌زمینه اجرا می‌کنیم
-   tokio::spawn(async move {
-    axum::Server::from_tcp(listener.into_std().unwrap())
-        .unwrap() // <-- Add this line to get the builder out of the Result
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
-});
+    tokio::spawn(async move {
+        axum::Server::from_tcp(listener.into_std().unwrap())
+            .unwrap() // <-- Add this line to get the builder out of the Result
+            .serve(app.into_make_service())
+            .await
+            .unwrap();
+    });
     (addr, pool)
 }
 
@@ -64,12 +64,11 @@ async fn test_shorten_and_redirect_workflow() {
     let short_code = response_json.short_url.split('/').last().unwrap();
 
     // چک می‌کنیم که آیا واقعاً در دیتابیس ذخیره شده؟
-    let db_record: (String,) =
-        sqlx::query_as("SELECT original_url FROM urls WHERE short_code = ?")
-            .bind(short_code)
-            .fetch_one(&db_pool)
-            .await
-            .expect("Failed to find record in test DB");
+    let db_record: (String,) = sqlx::query_as("SELECT original_url FROM urls WHERE short_code = ?")
+        .bind(short_code)
+        .fetch_one(&db_pool)
+        .await
+        .expect("Failed to find record in test DB");
     assert_eq!(db_record.0, original_url); // آیا URL ذخیره شده همونه؟
 
     // --- اجرا (Act) ۲: تست GET /:id (Redirect) ---

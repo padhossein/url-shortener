@@ -1,12 +1,12 @@
 use anyhow::Result;
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Redirect},
     routing::{get, post},
-    Json, Router,
 };
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{Rng, distributions::Alphanumeric};
 use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use std::net::SocketAddr;
@@ -15,12 +15,12 @@ use url::Url;
 // اینها رو `pub` می‌کنیم تا از بیرون ماژول (مثل main.rs و تست‌ها) قابل دسترسی باشن
 pub type DatabasePool = SqlitePool;
 
-#[derive(Deserialize , Serialize)]
+#[derive(Deserialize, Serialize)]
 pub struct ShortenRequest {
     pub url: String,
 }
 
-#[derive(Serialize , Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ShortenResponse {
     pub short_url: String,
 }
@@ -73,10 +73,11 @@ pub async fn redirect(
     State(pool): State<DatabasePool>,
     Path(short_code): Path<String>,
 ) -> impl IntoResponse {
-    let result = sqlx::query_as::<_, UrlRecord>("SELECT original_url FROM urls WHERE short_code = ?")
-        .bind(&short_code)
-        .fetch_one(&pool)
-        .await;
+    let result =
+        sqlx::query_as::<_, UrlRecord>("SELECT original_url FROM urls WHERE short_code = ?")
+            .bind(&short_code)
+            .fetch_one(&pool)
+            .await;
 
     match result {
         Ok(record) => Redirect::permanent(&record.original_url).into_response(),
