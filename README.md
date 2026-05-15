@@ -1,3 +1,4 @@
+URL Shortener
 A small Rust web service that turns long URLs into short redirect links. It is built with Axum, Tokio, SQLx, and SQLite, so it is a good practice project for async backend development in Rust.
 
 Features
